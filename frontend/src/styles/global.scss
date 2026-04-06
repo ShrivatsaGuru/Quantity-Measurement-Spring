@@ -1,0 +1,53 @@
+// ── Tokens ────────────────────────────────────────────────────────────────────
+$primary:      #4a72f5;
+$primary-dark: #2d55d4;
+$accent:       #17c671;
+$bg:           #f0f2f8;
+$surface:      #ffffff;
+$border:       #e2e8f0;
+$text:         #1a202c;
+$text-muted:   #718096;
+$danger:       #e53e3e;
+$shadow:       0 2px 12px rgba(0,0,0,0.08);
+$radius:       14px;
+$radius-sm:    8px;
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: $bg;
+  color: $text;
+  min-height: 100vh;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+// ── Layout helpers ────────────────────────────────────────────────────────────
+.container {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  &--success { background: #c6f6d5; color: #276749; }
+  &--error   { background: #fed7d7; color: #9b2c2c; }
+  &--info    { background: #bee3f8; color: #2c5282; }
+}
+
+// ── Scrollbar ─────────────────────────────────────────────────────────────────
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 3px; }

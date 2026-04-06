@@ -13,128 +13,136 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Service implementation handling all quantity measurement business logic.
+ * Business logic for all quantity measurement operations.
  *
- * Key design decisions (from UC17):
- *  - No @Transactional at class level — we intentionally save error results
- *    to the DB even when an operation fails, so a rolled-back transaction
- *    would lose that audit record.
- *  - Field injection via @Autowired for simplicity; constructor injection
- *    is preferred for testability if you refactor later.
- *  - Every operation saves its result (success or error) to the repository
- *    so history/count endpoints always have data to return.
+ * Design notes:
+ *  - Every operation (success OR error) is persisted so history endpoints always have data.
+ *  - No class-level @Transactional — we intentionally save error records even on failure.
+ *  - All arithmetic converts operands to a base unit first, then converts result to target unit.
+ *
+ * Base units: INCHES (Length), MILLILITER (Volume), GRAM (Weight), CELSIUS (Temperature)
  */
 @Service
 public class QuantityMeasurementServiceImpl implements IQuantityMeasurementService {
 
-    private static final Logger logger =
-            Logger.getLogger(QuantityMeasurementServiceImpl.class.getName());
+    private static final Logger log = Logger.getLogger(QuantityMeasurementServiceImpl.class.getName());
 
     @Autowired
     private QuantityMeasurementRepository repository;
 
-    // ── COMPARE ──────────────────────────────────────────────────────────────
+    // ── COMPARE ───────────────────────────────────────────────────────────────
 
     @Override
     public QuantityMeasurementDTO compare(QuantityDTO thisQty, QuantityDTO thatQty) {
-        logger.info("Comparing: " + thisQty + " vs " + thatQty);
         QuantityMeasurementDTO result = new QuantityMeasurementDTO();
         try {
-            validateSameMeasurementType(thisQty, thatQty, "compare");
-            double thisInBase = toBaseUnit(thisQty);
-            double thatInBase = toBaseUnit(thatQty);
-            boolean equal     = Double.compare(thisInBase, thatInBase) == 0;
+            assertSameType(thisQty, thatQty);
+            boolean equal = Double.compare(toBase(thisQty), toBase(thatQty)) == 0;
 
-            populateOperands(result, thisQty, thatQty);
-            result.setOperation(OperationType.COMPARE.name());
-            result.setResultString(String.valueOf(equal));
-            result.setError(false);
+            populate(result, thisQty, thatQty, OperationType.COMPARE);
+            result.setResultString(String.valueOf(equal));   // "true" or "false"
         } catch (Exception e) {
             populateError(result, thisQty, thatQty, OperationType.COMPARE, e.getMessage());
         }
-        return saveAndReturn(result);
+        return save(result);
     }
 
-    // ── CONVERT ──────────────────────────────────────────────────────────────
+    // ── CONVERT ───────────────────────────────────────────────────────────────
 
     @Override
     public QuantityMeasurementDTO convert(QuantityDTO thisQty, QuantityDTO thatQty) {
-        logger.info("Converting: " + thisQty + " → " + thatQty.getUnit());
         QuantityMeasurementDTO result = new QuantityMeasurementDTO();
         try {
-            validateSameMeasurementType(thisQty, thatQty, "convert");
-            double converted = convertValue(thisQty, thatQty.getUnit());
+            assertSameType(thisQty, thatQty);
+            String targetUnit = thatQty.getUnit();
+            double converted  = fromBase(toBase(thisQty), targetUnit, thisQty.getMeasurementType());
 
-            populateOperands(result, thisQty, thatQty);
-            result.setOperation(OperationType.CONVERT.name());
+            populate(result, thisQty, thatQty, OperationType.CONVERT);
             result.setResultValue(converted);
-            result.setResultUnit(thatQty.getUnit());
+            result.setResultUnit(targetUnit);
             result.setResultMeasurementType(thisQty.getMeasurementType());
-            result.setError(false);
+            result.setResultString(thisQty.getValue() + " " + thisQty.getUnit()
+                    + " = " + converted + " " + targetUnit);
         } catch (Exception e) {
             populateError(result, thisQty, thatQty, OperationType.CONVERT, e.getMessage());
         }
-        return saveAndReturn(result);
+        return save(result);
     }
 
-    // ── ADD (same unit) ──────────────────────────────────────────────────────
+    // ── ADD ───────────────────────────────────────────────────────────────────
 
     @Override
     public QuantityMeasurementDTO add(QuantityDTO thisQty, QuantityDTO thatQty) {
-        return performArithmetic(thisQty, thatQty, null, OperationType.ADD);
+        return arithmetic(thisQty, thatQty, null, OperationType.ADD);
     }
-
-    // ── ADD (with target unit) ───────────────────────────────────────────────
 
     @Override
-    public QuantityMeasurementDTO add(QuantityDTO thisQty, QuantityDTO thatQty,
-                                      QuantityDTO targetUnit) {
-        return performArithmetic(thisQty, thatQty, targetUnit, OperationType.ADD);
+    public QuantityMeasurementDTO add(QuantityDTO thisQty, QuantityDTO thatQty, QuantityDTO targetUnit) {
+        return arithmetic(thisQty, thatQty, targetUnit, OperationType.ADD);
     }
 
-    // ── SUBTRACT (same unit) ─────────────────────────────────────────────────
+    // ── SUBTRACT ──────────────────────────────────────────────────────────────
 
     @Override
     public QuantityMeasurementDTO subtract(QuantityDTO thisQty, QuantityDTO thatQty) {
-        return performArithmetic(thisQty, thatQty, null, OperationType.SUBTRACT);
+        return arithmetic(thisQty, thatQty, null, OperationType.SUBTRACT);
     }
-
-    // ── SUBTRACT (with target unit) ──────────────────────────────────────────
 
     @Override
-    public QuantityMeasurementDTO subtract(QuantityDTO thisQty, QuantityDTO thatQty,
-                                            QuantityDTO targetUnit) {
-        return performArithmetic(thisQty, thatQty, targetUnit, OperationType.SUBTRACT);
+    public QuantityMeasurementDTO subtract(QuantityDTO thisQty, QuantityDTO thatQty, QuantityDTO targetUnit) {
+        return arithmetic(thisQty, thatQty, targetUnit, OperationType.SUBTRACT);
     }
 
-    // ── DIVIDE ───────────────────────────────────────────────────────────────
+    // ── MULTIPLY ──────────────────────────────────────────────────────────────
+
+    @Override
+    public QuantityMeasurementDTO multiply(QuantityDTO thisQty, QuantityDTO thatQty) {
+        QuantityMeasurementDTO result = new QuantityMeasurementDTO();
+        try {
+            assertSameType(thisQty, thatQty);
+            double product = toBase(thisQty) * toBase(thatQty);
+            double finalVal = fromBase(product, thisQty.getUnit(), thisQty.getMeasurementType());
+
+            populate(result, thisQty, thatQty, OperationType.MULTIPLY);
+            result.setResultValue(finalVal);
+            result.setResultUnit(thisQty.getUnit());
+            result.setResultMeasurementType(thisQty.getMeasurementType());
+            result.setResultString(thisQty.getValue() + " " + thisQty.getUnit()
+                    + " * " + thatQty.getValue() + " " + thatQty.getUnit()
+                    + " = " + finalVal + " " + thisQty.getUnit());
+        } catch (Exception e) {
+            populateError(result, thisQty, thatQty, OperationType.MULTIPLY, e.getMessage());
+        }
+        return save(result);
+    }
+
+    // ── DIVIDE ────────────────────────────────────────────────────────────────
 
     @Override
     public QuantityMeasurementDTO divide(QuantityDTO thisQty, QuantityDTO thatQty) {
-        logger.info("Dividing: " + thisQty + " / " + thatQty);
         QuantityMeasurementDTO result = new QuantityMeasurementDTO();
         try {
-            validateSameMeasurementType(thisQty, thatQty, "divide");
-            double thatInBase = toBaseUnit(thatQty);
-            if (Double.compare(thatInBase, 0.0) == 0) {
-                throw new ArithmeticException("Divide by zero");
-            }
-            double thisInBase  = toBaseUnit(thisQty);
-            double quotient    = thisInBase / thatInBase;
+            assertSameType(thisQty, thatQty);
+            double divisor = toBase(thatQty);
+            if (Double.compare(divisor, 0.0) == 0)
+                throw new QuantityMeasurementException("Cannot divide by zero");
 
-            populateOperands(result, thisQty, thatQty);
-            result.setOperation(OperationType.DIVIDE.name());
+            double quotient = toBase(thisQty) / divisor;
+
+            populate(result, thisQty, thatQty, OperationType.DIVIDE);
             result.setResultValue(quotient);
             result.setResultUnit(thisQty.getUnit());
             result.setResultMeasurementType(thisQty.getMeasurementType());
-            result.setError(false);
+            result.setResultString(thisQty.getValue() + " " + thisQty.getUnit()
+                    + " / " + thatQty.getValue() + " " + thatQty.getUnit()
+                    + " = " + quotient);
         } catch (Exception e) {
             populateError(result, thisQty, thatQty, OperationType.DIVIDE, e.getMessage());
         }
-        return saveAndReturn(result);
+        return save(result);
     }
 
-    // ── HISTORY / ANALYTICS ──────────────────────────────────────────────────
+    // ── HISTORY / ANALYTICS ───────────────────────────────────────────────────
 
     @Override
     public List<QuantityMeasurementDTO> getOperationHistory(String operation) {
@@ -155,180 +163,149 @@ public class QuantityMeasurementServiceImpl implements IQuantityMeasurementServi
 
     @Override
     public List<QuantityMeasurementDTO> getErrorHistory() {
-        return QuantityMeasurementDTO.fromEntityList(
-                repository.findByIsErrorTrue());
+        return QuantityMeasurementDTO.fromEntityList(repository.findByIsErrorTrue());
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /** Core arithmetic handler shared by add/subtract with or without target unit. */
-    private QuantityMeasurementDTO performArithmetic(
-            QuantityDTO thisQty, QuantityDTO thatQty,
-            QuantityDTO targetUnit, OperationType opType) {
-
-        logger.info(opType + ": " + thisQty + ", " + thatQty);
+    /** Shared arithmetic handler for ADD and SUBTRACT (with or without a target unit). */
+    private QuantityMeasurementDTO arithmetic(QuantityDTO thisQty, QuantityDTO thatQty,
+                                               QuantityDTO targetUnit, OperationType op) {
         QuantityMeasurementDTO result = new QuantityMeasurementDTO();
         try {
-            validateSameMeasurementType(thisQty, thatQty,
-                    opType.name().toLowerCase());
+            assertSameType(thisQty, thatQty);
 
-            double thisInBase = toBaseUnit(thisQty);
-            double thatInBase = toBaseUnit(thatQty);
-            double rawResult  = opType == OperationType.ADD
-                    ? thisInBase + thatInBase
-                    : thisInBase - thatInBase;
+            double baseResult = op == OperationType.ADD
+                    ? toBase(thisQty) + toBase(thatQty)
+                    : toBase(thisQty) - toBase(thatQty);
 
-            String outputUnit = targetUnit != null
-                    ? targetUnit.getUnit()
-                    : thisQty.getUnit();
+            String outUnit  = targetUnit != null ? targetUnit.getUnit() : thisQty.getUnit();
+            double finalVal = fromBase(baseResult, outUnit, thisQty.getMeasurementType());
+            String symbol   = op == OperationType.ADD ? "+" : "-";
 
-            // Convert raw base-unit result back to desired output unit
-            double finalResult = fromBaseUnit(rawResult, outputUnit,
-                    thisQty.getMeasurementType());
-
-            populateOperands(result, thisQty, thatQty);
-            result.setOperation(opType.name());
-            result.setResultValue(finalResult);
-            result.setResultUnit(outputUnit);
+            populate(result, thisQty, thatQty, op);
+            result.setResultValue(finalVal);
+            result.setResultUnit(outUnit);
             result.setResultMeasurementType(thisQty.getMeasurementType());
-            result.setError(false);
+            result.setResultString(thisQty.getValue() + " " + thisQty.getUnit()
+                    + " " + symbol + " " + thatQty.getValue() + " " + thatQty.getUnit()
+                    + " = " + finalVal + " " + outUnit);
         } catch (Exception e) {
-            populateError(result, thisQty, thatQty, opType, e.getMessage());
+            populateError(result, thisQty, thatQty, op, e.getMessage());
         }
-        return saveAndReturn(result);
+        return save(result);
     }
 
-    /** Validates both quantities share the same measurement type. */
-    private void validateSameMeasurementType(QuantityDTO a, QuantityDTO b,
-                                              String operation) {
-        if (!a.getMeasurementType().equals(b.getMeasurementType())) {
+    /** Throws if the two quantities do not share the same measurement type. */
+    private void assertSameType(QuantityDTO a, QuantityDTO b) {
+        if (!a.getMeasurementType().equalsIgnoreCase(b.getMeasurementType()))
             throw new QuantityMeasurementException(
-                    operation + " Error: Cannot perform arithmetic between different"
-                    + " measurement categories: "
-                    + a.getMeasurementType() + " and " + b.getMeasurementType());
-        }
+                    "Type mismatch: cannot operate on " + a.getMeasurementType()
+                    + " and " + b.getMeasurementType());
     }
 
     /**
-     * Converts a quantity to its canonical base unit value.
-     * Base units: INCHES (length), MILLILITER (volume), GRAM (weight), CELSIUS (temp).
-     * NOTE: Replace these stubs with your actual unit-conversion logic from UC1-UC16.
+     * Converts a quantity to its base unit value.
+     * Base units: INCHES (Length), MILLILITER (Volume), GRAM (Weight), CELSIUS (Temperature).
      */
-    private double toBaseUnit(QuantityDTO qty) {
+    private double toBase(QuantityDTO qty) {
         double v = qty.getValue();
-        switch (qty.getMeasurementType()) {
-            case "LengthUnit":
-                switch (qty.getUnit().toUpperCase()) {
-                    case "FEET":       return v * 12.0;
-                    case "YARDS":      return v * 36.0;
-                    case "CENTIMETERS":return v / 2.54;
-                    case "METERS":     return v / 2.54 * 100;
-                    case "KILOMETERS": return v / 2.54 * 100000;
-                    case "MILES":      return v * 63360;
-                    default:           return v; // INCHES = base
-                }
-            case "VolumeUnit":
-                switch (qty.getUnit().toUpperCase()) {
-                    case "LITRE":      return v * 1000.0;
-                    case "GALLON":     return v * 3785.41;
-                    case "CUBIC_METER":return v * 1_000_000.0;
-                    default:           return v; // MILLILITER = base
-                }
-            case "WeightUnit":
-                switch (qty.getUnit().toUpperCase()) {
-                    case "KILOGRAM":   return v * 1000.0;
-                    case "POUND":      return v * 453.592;
-                    case "TONNE":      return v * 1_000_000.0;
-                    case "MILLIGRAM":  return v / 1000.0;
-                    default:           return v; // GRAM = base
-                }
-            case "TemperatureUnit":
-                switch (qty.getUnit().toUpperCase()) {
-                    case "FAHRENHEIT": return (v - 32) * 5.0 / 9.0;
-                    case "KELVIN":     return v - 273.15;
-                    default:           return v; // CELSIUS = base
-                }
-            default:
-                throw new QuantityMeasurementException(
-                        "Unknown measurement type: " + qty.getMeasurementType());
-        }
+        return switch (qty.getMeasurementType()) {
+            case "LengthUnit" -> switch (qty.getUnit().toUpperCase()) {
+                case "FEET"        -> v * 12.0;
+                case "YARDS"       -> v * 36.0;
+                case "CENTIMETERS" -> v / 2.54;
+                case "METERS"      -> v / 2.54 * 100;
+                case "KILOMETERS"  -> v / 2.54 * 100_000;
+                case "MILES"       -> v * 63_360;
+                default            -> v;   // INCHES
+            };
+            case "VolumeUnit" -> switch (qty.getUnit().toUpperCase()) {
+                case "LITRE"       -> v * 1_000.0;
+                case "GALLON"      -> v * 3_785.41;
+                case "CUBIC_METER" -> v * 1_000_000.0;
+                default            -> v;   // MILLILITER
+            };
+            case "WeightUnit" -> switch (qty.getUnit().toUpperCase()) {
+                case "KILOGRAM"    -> v * 1_000.0;
+                case "TONNE"       -> v * 1_000_000.0;
+                case "POUND"       -> v * 453.592;
+                case "MILLIGRAM"   -> v / 1_000.0;
+                default            -> v;   // GRAM
+            };
+            case "TemperatureUnit" -> switch (qty.getUnit().toUpperCase()) {
+                case "FAHRENHEIT"  -> (v - 32) * 5.0 / 9.0;
+                case "KELVIN"      -> v - 273.15;
+                default            -> v;   // CELSIUS
+            };
+            default -> throw new QuantityMeasurementException(
+                    "Unknown measurement type: " + qty.getMeasurementType());
+        };
     }
 
-    /** Converts a base-unit value back into the specified output unit. */
-    private double fromBaseUnit(double baseValue, String targetUnit,
-                                 String measurementType) {
-        switch (measurementType) {
-            case "LengthUnit":
-                switch (targetUnit.toUpperCase()) {
-                    case "FEET":        return baseValue / 12.0;
-                    case "YARDS":       return baseValue / 36.0;
-                    case "CENTIMETERS": return baseValue * 2.54;
-                    case "METERS":      return baseValue * 2.54 / 100;
-                    case "KILOMETERS":  return baseValue * 2.54 / 100000;
-                    case "MILES":       return baseValue / 63360;
-                    default:            return baseValue; // INCHES
-                }
-            case "VolumeUnit":
-                switch (targetUnit.toUpperCase()) {
-                    case "LITRE":       return baseValue / 1000.0;
-                    case "GALLON":      return baseValue / 3785.41;
-                    default:            return baseValue; // MILLILITER
-                }
-            case "WeightUnit":
-                switch (targetUnit.toUpperCase()) {
-                    case "KILOGRAM":    return baseValue / 1000.0;
-                    case "POUND":       return baseValue / 453.592;
-                    case "TONNE":       return baseValue / 1_000_000.0;
-                    case "MILLIGRAM":   return baseValue * 1000.0;
-                    default:            return baseValue; // GRAM
-                }
-            case "TemperatureUnit":
-                switch (targetUnit.toUpperCase()) {
-                    case "FAHRENHEIT":  return baseValue * 9.0 / 5.0 + 32;
-                    case "KELVIN":      return baseValue + 273.15;
-                    default:            return baseValue; // CELSIUS
-                }
-            default:
-                throw new QuantityMeasurementException(
-                        "Unknown measurement type: " + measurementType);
-        }
+    /** Converts a base-unit value back to the desired target unit. */
+    private double fromBase(double base, String targetUnit, String type) {
+        return switch (type) {
+            case "LengthUnit" -> switch (targetUnit.toUpperCase()) {
+                case "FEET"        -> base / 12.0;
+                case "YARDS"       -> base / 36.0;
+                case "CENTIMETERS" -> base * 2.54;
+                case "METERS"      -> base * 2.54 / 100;
+                case "KILOMETERS"  -> base * 2.54 / 100_000;
+                case "MILES"       -> base / 63_360;
+                default            -> base;  // INCHES
+            };
+            case "VolumeUnit" -> switch (targetUnit.toUpperCase()) {
+                case "LITRE"       -> base / 1_000.0;
+                case "GALLON"      -> base / 3_785.41;
+                case "CUBIC_METER" -> base / 1_000_000.0;
+                default            -> base;  // MILLILITER
+            };
+            case "WeightUnit" -> switch (targetUnit.toUpperCase()) {
+                case "KILOGRAM"    -> base / 1_000.0;
+                case "TONNE"       -> base / 1_000_000.0;
+                case "POUND"       -> base / 453.592;
+                case "MILLIGRAM"   -> base * 1_000.0;
+                default            -> base;  // GRAM
+            };
+            case "TemperatureUnit" -> switch (targetUnit.toUpperCase()) {
+                case "FAHRENHEIT"  -> base * 9.0 / 5.0 + 32;
+                case "KELVIN"      -> base + 273.15;
+                default            -> base;  // CELSIUS
+            };
+            default -> throw new QuantityMeasurementException("Unknown type: " + type);
+        };
     }
 
-    /** Converts thisQty to a specific target unit (used by convert endpoint). */
-    private double convertValue(QuantityDTO source, String targetUnit) {
-        double base = toBaseUnit(source);
-        return fromBaseUnit(base, targetUnit, source.getMeasurementType());
-    }
-
-    /** Populates the two operand fields on a result DTO. */
-    private void populateOperands(QuantityMeasurementDTO dto,
-                                   QuantityDTO thisQty, QuantityDTO thatQty) {
-        dto.setThisValue(thisQty.getValue());
-        dto.setThisUnit(thisQty.getUnit());
+    /** Fills in the common operand + operation fields on the result DTO. */
+    private void populate(QuantityMeasurementDTO dto,
+                          QuantityDTO thisQty, QuantityDTO thatQty, OperationType op) {
+        dto.setThisValue(thisQty.getValue());        dto.setThisUnit(thisQty.getUnit());
         dto.setThisMeasurementType(thisQty.getMeasurementType());
-        dto.setThatValue(thatQty.getValue());
-        dto.setThatUnit(thatQty.getUnit());
+        dto.setThatValue(thatQty.getValue());        dto.setThatUnit(thatQty.getUnit());
         dto.setThatMeasurementType(thatQty.getMeasurementType());
+        dto.setOperation(op.name());
+        dto.setError(false);
     }
 
-    /** Populates the error fields on a result DTO. */
+    /** Fills in error fields on the result DTO. Always called before save(). */
     private void populateError(QuantityMeasurementDTO dto,
                                 QuantityDTO thisQty, QuantityDTO thatQty,
-                                OperationType opType, String message) {
-        logger.warning(opType + " error: " + message);
-        if (thisQty != null) populateOperands(dto, thisQty, thatQty);
-        dto.setOperation(opType.name());
+                                OperationType op, String message) {
+        log.warning(op + " error: " + message);
+        if (thisQty != null) populate(dto, thisQty, thatQty, op);
+        dto.setOperation(op.name());
         dto.setError(true);
         dto.setErrorMessage(message);
     }
 
-    /** Saves the result entity to the DB and returns the DTO. */
-    private QuantityMeasurementDTO saveAndReturn(QuantityMeasurementDTO dto) {
+    /** Persists the result entity and returns the saved DTO. */
+    private QuantityMeasurementDTO save(QuantityMeasurementDTO dto) {
         try {
             QuantityMeasurementEntity saved = repository.save(dto.toEntity());
             return QuantityMeasurementDTO.fromEntity(saved);
         } catch (Exception e) {
-            logger.severe("Failed to save result: " + e.getMessage());
+            log.severe("DB save failed: " + e.getMessage());
             return dto;
         }
     }

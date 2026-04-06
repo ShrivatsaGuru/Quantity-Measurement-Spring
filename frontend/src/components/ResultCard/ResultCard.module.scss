@@ -1,0 +1,113 @@
+@use '../../styles/variables' as *;
+
+.card {
+  margin-top: 24px;
+  border-radius: $radius;
+  padding: 24px;
+  animation: slideUp 0.3s ease;
+  border: 2px solid transparent;
+
+  &.cardSuccess {
+    background: #f0fff8;
+    border-color: #b2f5e1;
+  }
+
+  &.cardError {
+    background: #fff5f5;
+    border-color: #feb2b2;
+  }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: $text-muted;
+}
+
+.expression {
+  font-size: 15px;
+  color: $text-muted;
+  font-weight: 500;
+  margin-bottom: 12px;
+  font-family: 'Courier New', monospace;
+}
+
+.numericResult {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.resultValue {
+  font-size: 42px;
+  font-weight: 800;
+  color: $text;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.resultUnit {
+  font-size: 18px;
+  font-weight: 600;
+  color: $primary;
+}
+
+.compareBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 14px 28px;
+  border-radius: 40px;
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 12px;
+
+  &.equal {
+    background: #c6f6d5;
+    color: #276749;
+  }
+
+  &.notEqual {
+    background: #fed7d7;
+    color: #9b2c2c;
+  }
+}
+
+.errorMsg {
+  color: $danger;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.meta {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+.metaItem {
+  font-size: 12px;
+  color: $text-muted;
+
+  b {
+    color: $text;
+    font-weight: 600;
+  }
+}

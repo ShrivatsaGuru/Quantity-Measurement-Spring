@@ -1,0 +1,209 @@
+@use '../styles/variables' as *;
+
+.page { padding: 36px 0 60px; }
+
+.pageTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  font-size: 26px;
+
+  h1 {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tab {
+  padding: 9px 20px;
+  border: 2px solid $border;
+  border-radius: 30px;
+  background: $surface;
+  color: $text-muted;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover { border-color: $primary; color: $primary; }
+
+  &.tabActive {
+    background: $primary;
+    border-color: $primary;
+    color: #fff;
+  }
+}
+
+// ── Filter bar ────────────────────────────────────────────────────────────────
+.filterBar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: $text-muted;
+  }
+
+  select {
+    padding: 9px 14px;
+    border: 2px solid $border;
+    border-radius: $radius-sm;
+    font-size: 14px;
+    font-weight: 600;
+    color: $text;
+    background: $surface;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+
+    &:focus { border-color: $primary; }
+  }
+}
+
+.refreshBtn {
+  align-self: flex-end;
+  padding: 9px 20px;
+  background: $surface;
+  border: 2px solid $border;
+  border-radius: $radius-sm;
+  font-size: 14px;
+  font-weight: 600;
+  color: $text-muted;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover { border-color: $primary; color: $primary; }
+  &:disabled { opacity: 0.5; }
+}
+
+// ── Count card ────────────────────────────────────────────────────────────────
+.countCard {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  background: $surface;
+  border-radius: $radius;
+  padding: 28px 32px;
+  box-shadow: $shadow;
+  margin-bottom: 24px;
+}
+
+.countNum {
+  font-size: 56px;
+  font-weight: 800;
+  color: $primary;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.countLabel {
+  font-size: 16px;
+  color: $text-muted;
+  font-weight: 500;
+}
+
+// ── Error / empty ─────────────────────────────────────────────────────────────
+.errorBox {
+  padding: 14px 18px;
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: $radius-sm;
+  color: $danger;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.empty {
+  text-align: center;
+  color: $text-muted;
+  padding: 48px 0;
+  font-size: 15px;
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+.tableWrap {
+  background: $surface;
+  border-radius: $radius;
+  box-shadow: $shadow;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+
+  th {
+    padding: 12px 16px;
+    background: #f8fafc;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: $text-muted;
+    border-bottom: 1px solid $border;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 13px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tr.rowError { background: #fff9f9; }
+
+  tr:hover:not(.rowError) td { background: #f8fafc; }
+}
+
+.opBadge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #ebf4ff;
+  border-radius: 12px;
+  color: $primary;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.val   { font-weight: 700; color: $text; margin-right: 4px; }
+.unit  { font-size: 12px; color: $primary; font-weight: 600; margin-right: 4px; }
+.type  { font-size: 11px; color: $text-muted; display: block; }
+
+.resultCol { max-width: 260px; }
+
+.resultStr {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: $text;
+}
+
+.errMsg {
+  color: $danger;
+  font-size: 13px;
+}

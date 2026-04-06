@@ -1,16 +1,18 @@
 package com.app.quantitymeasurement.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 /**
- * JPA Entity mapped to the quantity_measurement_entity table.
- * Persists every operation result (success or error) for audit/history.
- * Never sent directly over the wire — use QuantityMeasurementDTO instead.
+ * JPA entity persisted for every operation (success or error) — used for history/audit.
+ * Never sent over the wire; use QuantityMeasurementDTO for API responses.
+ *
+ * NOTE: @Getter/@Setter used instead of @Data to avoid Lombok generating
+ *       equals()/hashCode() on all fields — that breaks JPA identity semantics.
  */
 @Entity
 @Table(
@@ -21,206 +23,41 @@ import java.time.LocalDateTime;
         @Index(name = "idx_created_at",       columnList = "created_at")
     }
 )
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
-@AllArgsConstructor
 public class QuantityMeasurementEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // ── First operand ────────────────────────────────────────────────────────
-    @Column(name = "this_value", nullable = false)
-    private double thisValue;
+    // ── First operand ─────────────────────────────────────────────────────────
+    @Column(name = "this_value",            nullable = false) private double thisValue;
+    @Column(name = "this_unit",             nullable = false) private String thisUnit;
+    @Column(name = "this_measurement_type", nullable = false) private String thisMeasurementType;
 
-    @Column(name = "this_unit", nullable = false)
-    private String thisUnit;
+    // ── Second operand ────────────────────────────────────────────────────────
+    @Column(name = "that_value",            nullable = false) private double thatValue;
+    @Column(name = "that_unit",             nullable = false) private String thatUnit;
+    @Column(name = "that_measurement_type", nullable = false) private String thatMeasurementType;
 
-    @Column(name = "this_measurement_type", nullable = false)
-    private String thisMeasurementType;
+    // ── Operation & result ────────────────────────────────────────────────────
+    @Column(name = "operation",               nullable = false) private String operation;
+    @Column(name = "result_value")                             private double resultValue;
+    @Column(name = "result_unit")                              private String resultUnit;
+    @Column(name = "result_measurement_type")                  private String resultMeasurementType;
+    /** Human-readable result e.g. "1.0 FEET + 12.0 INCHES = 2.0 FEET" or "true" for compare. */
+    @Column(name = "result_string")                            private String resultString;
 
-    // ── Second operand ───────────────────────────────────────────────────────
-    @Column(name = "that_value", nullable = false)
-    private double thatValue;
+    // ── Error state ───────────────────────────────────────────────────────────
+    @Column(name = "is_error")      private boolean isError;
+    @Column(name = "error_message") private String  errorMessage;
 
-    @Column(name = "that_unit", nullable = false)
-    private String thatUnit;
+    // ── Timestamps ────────────────────────────────────────────────────────────
+    @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
+    @Column(name = "updated_at", nullable = false)                    private LocalDateTime updatedAt;
 
-    @Column(name = "that_measurement_type", nullable = false)
-    private String thatMeasurementType;
-
-    // ── Operation type (COMPARE, CONVERT, ADD, SUBTRACT, MULTIPLY, DIVIDE) ──
-    @Column(name = "operation", nullable = false)
-    private String operation;
-
-    // ── Result ───────────────────────────────────────────────────────────────
-    @Column(name = "result_value")
-    private double resultValue;
-
-    @Column(name = "result_unit")
-    private String resultUnit;
-
-    @Column(name = "result_measurement_type")
-    private String resultMeasurementType;
-
-    /** For comparisons: "true" or "false" */
-    @Column(name = "result_string")
-    private String resultString;
-
-    // ── Error state ──────────────────────────────────────────────────────────
-    @Column(name = "is_error")
-    private boolean isError;
-
-    @Column(name = "error_message")
-    private String errorMessage;
-
-    // ── Timestamps (managed by lifecycle callbacks) ──────────────────────────
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
-	public Long getId() {
-		return id;
-	}
-
-	public void setId(Long id) {
-		this.id = id;
-	}
-
-	public double getThisValue() {
-		return thisValue;
-	}
-
-	public void setThisValue(double thisValue) {
-		this.thisValue = thisValue;
-	}
-
-	public String getThisUnit() {
-		return thisUnit;
-	}
-
-	public void setThisUnit(String thisUnit) {
-		this.thisUnit = thisUnit;
-	}
-
-	public String getThisMeasurementType() {
-		return thisMeasurementType;
-	}
-
-	public void setThisMeasurementType(String thisMeasurementType) {
-		this.thisMeasurementType = thisMeasurementType;
-	}
-
-	public double getThatValue() {
-		return thatValue;
-	}
-
-	public void setThatValue(double thatValue) {
-		this.thatValue = thatValue;
-	}
-
-	public String getThatUnit() {
-		return thatUnit;
-	}
-
-	public void setThatUnit(String thatUnit) {
-		this.thatUnit = thatUnit;
-	}
-
-	public String getThatMeasurementType() {
-		return thatMeasurementType;
-	}
-
-	public void setThatMeasurementType(String thatMeasurementType) {
-		this.thatMeasurementType = thatMeasurementType;
-	}
-
-	public String getOperation() {
-		return operation;
-	}
-
-	public void setOperation(String operation) {
-		this.operation = operation;
-	}
-
-	public double getResultValue() {
-		return resultValue;
-	}
-
-	public void setResultValue(double resultValue) {
-		this.resultValue = resultValue;
-	}
-
-	public String getResultUnit() {
-		return resultUnit;
-	}
-
-	public void setResultUnit(String resultUnit) {
-		this.resultUnit = resultUnit;
-	}
-
-	public String getResultMeasurementType() {
-		return resultMeasurementType;
-	}
-
-	public void setResultMeasurementType(String resultMeasurementType) {
-		this.resultMeasurementType = resultMeasurementType;
-	}
-
-	public String getResultString() {
-		return resultString;
-	}
-
-	public void setResultString(String resultString) {
-		this.resultString = resultString;
-	}
-
-	public boolean isError() {
-		return isError;
-	}
-
-	public void setError(boolean isError) {
-		this.isError = isError;
-	}
-
-	public String getErrorMessage() {
-		return errorMessage;
-	}
-
-	public void setErrorMessage(String errorMessage) {
-		this.errorMessage = errorMessage;
-	}
-
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
-	}
-
-	public void setCreatedAt(LocalDateTime createdAt) {
-		this.createdAt = createdAt;
-	}
-
-	public LocalDateTime getUpdatedAt() {
-		return updatedAt;
-	}
-
-	public void setUpdatedAt(LocalDateTime updatedAt) {
-		this.updatedAt = updatedAt;
-	}
-    
-    
-    
+    @PrePersist protected void onCreate() { createdAt = updatedAt = LocalDateTime.now(); }
+    @PreUpdate  protected void onUpdate() { updatedAt = LocalDateTime.now(); }
 }

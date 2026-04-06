@@ -5,8 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,93 +14,47 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
- * Centralized exception handler for all REST controllers.
+ * Centralised exception handler for all controllers.
  *
- * Three handler methods:
- *  1. handleValidationException   — @Valid failures (HTTP 400)
- *  2. handleQuantityException     — QuantityMeasurementException (HTTP 400)
- *  3. handleGlobalException       — everything else (HTTP 500)
- *
- * Every response follows the same ErrorResponse structure so clients
- * always know what shape to expect on failure.
+ * Handlers:
+ *   1. MethodArgumentNotValidException — @Valid failures       → HTTP 400
+ *   2. QuantityMeasurementException    — domain errors         → HTTP 400
+ *   3. Exception                       — everything else       → HTTP 500
  */
-@ControllerAdvice
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Logger logger =
-            Logger.getLogger(GlobalExceptionHandler.class.getName());
+    private static final Logger log = Logger.getLogger(GlobalExceptionHandler.class.getName());
 
-    // ── Shared error response shape ──────────────────────────────────────────
+    /** Consistent error response shape returned on every failure. */
+    record ErrorResponse(LocalDateTime timestamp, int status, String error, String message, String path) {}
 
-    static class ErrorResponse {
-        public LocalDateTime timestamp;
-        public int           status;
-        public String        error;
-        public String        message;
-        public String        path;
-    }
-
-    // ── 1. Bean Validation failures (@Valid) ─────────────────────────────────
-
+    // 1. Bean Validation failures (@Valid)
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationException(
-            MethodArgumentNotValidException ex) {
-
-        logger.warning("Validation failed: " + ex.getMessage());
-
-        List<String> errors = ex.getBindingResult()
-                .getAllErrors()
-                .stream()
-                .map(ObjectError::getDefaultMessage)
-                .collect(Collectors.toList());
-
-        ErrorResponse response  = new ErrorResponse();
-        response.timestamp      = LocalDateTime.now();
-        response.status         = HttpStatus.BAD_REQUEST.value();
-        response.error          = "Quantity Measurement Error";
-        response.message        = String.join("; ", errors);
-        response.path           = "quantityInputDTO";
-
-        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+        List<String> errors = ex.getBindingResult().getAllErrors()
+                .stream().map(ObjectError::getDefaultMessage).collect(Collectors.toList());
+        log.warning("Validation failed: " + errors);
+        return build(HttpStatus.BAD_REQUEST, "Validation Error", String.join("; ", errors), "request body");
     }
 
-    // ── 2. Domain exceptions ─────────────────────────────────────────────────
-
+    // 2. Domain exceptions (incompatible types, divide-by-zero, unknown unit, …)
     @ExceptionHandler(QuantityMeasurementException.class)
-    public ResponseEntity<ErrorResponse> handleQuantityException(
-            QuantityMeasurementException ex,
-            HttpServletRequest request) {
-
-        logger.warning("QuantityMeasurementException: " + ex.getMessage()
-                + " for request path: " + request.getRequestURI());
-
-        ErrorResponse response  = new ErrorResponse();
-        response.timestamp      = LocalDateTime.now();
-        response.status         = HttpStatus.BAD_REQUEST.value();
-        response.error          = "Quantity Measurement Error";
-        response.message        = ex.getMessage();
-        response.path           = request.getRequestURI();
-
-        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ErrorResponse> handleDomain(QuantityMeasurementException ex,
+                                                       HttpServletRequest req) {
+        log.warning("Domain error at " + req.getRequestURI() + ": " + ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "Quantity Measurement Error", ex.getMessage(), req.getRequestURI());
     }
 
-    // ── 3. Catch-all ─────────────────────────────────────────────────────────
-
+    // 3. Catch-all (unexpected exceptions)
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGlobalException(
-            Exception ex,
-            HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex, HttpServletRequest req) {
+        log.severe("Unhandled exception at " + req.getRequestURI() + ": " + ex.getMessage());
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", ex.getMessage(), req.getRequestURI());
+    }
 
-        logger.severe("Unhandled exception: " + ex.getMessage()
-                + " for request path: " + request.getRequestURI());
-
-        ErrorResponse response  = new ErrorResponse();
-        response.timestamp      = LocalDateTime.now();
-        response.status         = HttpStatus.INTERNAL_SERVER_ERROR.value();
-        response.error          = "Internal Server Error";
-        response.message        = ex.getMessage();
-        response.path           = request.getRequestURI();
-
-        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String error, String message, String path) {
+        return ResponseEntity.status(status)
+                .body(new ErrorResponse(LocalDateTime.now(), status.value(), error, message, path));
     }
 }

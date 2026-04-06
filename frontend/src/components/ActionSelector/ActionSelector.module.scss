@@ -1,0 +1,51 @@
+@use '../../styles/variables' as *;
+
+.wrapper {
+  display: flex;
+  gap: 0;
+  margin-bottom: 28px;
+  border: 2px solid $border;
+  border-radius: $radius;
+  overflow: hidden;
+  background: $surface;
+  box-shadow: $shadow;
+}
+
+.btn {
+  flex: 1;
+  padding: 13px 16px;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  position: relative;
+
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 20%;
+    height: 60%;
+    width: 1px;
+    background: $border;
+  }
+
+  &:hover:not(.active) {
+    background: #f7f8fc;
+    color: $text;
+  }
+
+  &.active {
+    background: $primary;
+    color: #fff;
+
+    // remove separator next to active
+    &::after { display: none; }
+    & + .btn::before {
+      display: none;
+    }
+  }
+}

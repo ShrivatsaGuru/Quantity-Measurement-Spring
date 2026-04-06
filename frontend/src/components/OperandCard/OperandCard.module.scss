@@ -1,0 +1,78 @@
+@use '../../styles/variables' as *;
+
+.card {
+  background: $surface;
+  border-radius: $radius;
+  box-shadow: $shadow;
+  padding: 22px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+
+  &:focus-within {
+    border-color: $primary;
+  }
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: $text-muted;
+}
+
+.input {
+  font-size: 32px;
+  font-weight: 800;
+  color: $text;
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  padding: 0;
+
+  // Hide number spinners
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button { -webkit-appearance: none; }
+  -moz-appearance: textfield;
+
+  &::placeholder { color: #d1d5db; }
+}
+
+.selectWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  padding: 9px 36px 9px 14px;
+  border: 2px solid $border;
+  border-radius: $radius-sm;
+  font-size: 13px;
+  font-weight: 700;
+  color: $text;
+  background: #f8fafc;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+
+  &:hover, &:focus {
+    border-color: $primary;
+    background: darken(#f8fafc, 2%);
+  }
+}
+
+.chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: $text-muted;
+  font-size: 12px;
+}
